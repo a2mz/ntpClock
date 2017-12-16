@@ -1,13 +1,17 @@
+#include <FS.h>
 #include "Arduino.h"
 #include <NTPClient.h>
 #include <ESP8266WiFi.h>
 #include <WiFiUdp.h>
 #include <TimeLib.h>       //http://www.arduino.cc/playground/Code/Time
 #include <Timezone.h>    //https://github.com/JChristensen/Timezone
+#include <DNSServer.h>            //Local DNS Server used for redirecting all requests to the configuration portal
+#include <ESP8266WebServer.h>     //Local WebServer used to serve the configuration portal
+#include <WiFiManager.h>          //https://github.com/tzapu/WiFiManager WiFi Configuration Magic
 
 
-const char *ssid     = "ulitko";
-const char *password = "ghjnjnbg";
+// const char *ssid     = "ulitko";
+// const char *password = "ghjnjnbg";
 
 // for NodeMCU 1.0
 
@@ -57,39 +61,74 @@ int dots = 0;
 long dotTime = 0;
 int dx=0;
 int countSync = 1200; // every 1200 second run time sync
-
 //========================================================================
+
 
 void setup(){
   Serial.begin(115200);
+
+  //init max7219
   initMAX7219();
   sendCmdAll(CMD_SHUTDOWN,1);
   sendCmdAll(CMD_INTENSITY,10);
+  printStringWithShift("run   ",80);
 
-  WiFi.begin(ssid, password);
 
-   printStringWithShift("connect",80);
-  while ( WiFi.status() != WL_CONNECTED ) {
-    delay ( 1000 );
-  }
+
+ //init wifi manager
+ WiFiManager wifiManager;
+ // wifiManager.resetSettings();
+wifiManager.setAPCallback(configModeCallback);
+ wifiManager.autoConnect(".ntpclock");
+
+
   clr();
-  printStringWithShift("sync time",80);
+  printStringWithShift(".....sync time",80);
   timeClient.begin();
   timeClient.forceUpdate();
+
+
+
+//----------------------------------------------
+
+if (SPIFFS.begin()) {
+    Serial.print("mount fs");
+  Dir dir = SPIFFS.openDir("/");
+  while (dir.next()) {
+      Serial.print(dir.fileName());
+      File f = dir.openFile("r");
+      Serial.println(f.size());
+}
+}
+//----------------------------------------------
+
+
+
 }
 
 void loop() {
+
  utc = timeClient.getEpochTime();
  newHours= int(hour(myTimeZone.toLocal(utc, &tcr)) );
- newMinutes =int( minute(myTimeZone.toLocal(utc, &tcr)) );
+ newMinutes =int(minute(myTimeZone.toLocal(utc, &tcr)));
 
  if(millis()-dotTime > 500) {
+
+  Serial.println(".");
+
      dotTime = millis();
      dots = !dots;
      syncTime();
    }
   checkChangeTime();
   showAnimClock();
+}
+//========================================================================
+
+void configModeCallback (WiFiManager *myWiFiManager) {
+
+   printStringWithShift("set-wifi credentions ot config page 192.168.4.1",80);
+
 }
 
 //========================================================================
